@@ -10,23 +10,22 @@ Updated every REGIME_UPDATE_INTERVAL seconds (default 5 min).
 
 import asyncio
 import logging
-import time
-from typing import Dict, Tuple
+from typing import Tuple
 
 import pandas as pd
 import ta
-from hyperliquid.info import Info
 
 from bridgeagent import config
 from bridgeagent.core.state import AgentState
+from bridgeagent.venue.base import Venue
 
 logger = logging.getLogger(__name__)
 
 
 class RegimeDetector:
 
-    def __init__(self, mainnet_info: Info, candle_cache=None):
-        self.info = mainnet_info
+    def __init__(self, venue: Venue, candle_cache=None):
+        self.venue = venue
         self.candle_cache = candle_cache
 
     async def update(self, state: AgentState) -> None:
@@ -77,16 +76,9 @@ class RegimeDetector:
                 coin, config.TREND_CANDLE_INTERVAL, config.TREND_CANDLE_COUNT
             )
         try:
-            end_time = int(time.time() * 1000)
-            start_time = end_time - (config.TREND_CANDLE_COUNT * 4 * 60 * 60 * 1000)
-            candles = await asyncio.to_thread(
-                self.info.candles_snapshot,
-                coin,
-                config.TREND_CANDLE_INTERVAL,
-                start_time,
-                end_time,
+            return await self.venue.get_candles(
+                coin, config.TREND_CANDLE_INTERVAL, config.TREND_CANDLE_COUNT
             )
-            return candles or []
         except Exception as e:
             logger.debug(f"Failed to fetch 4h candles for {coin}: {e}")
             return []

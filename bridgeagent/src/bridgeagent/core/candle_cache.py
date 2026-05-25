@@ -1,5 +1,5 @@
 """
-Shared candle cache to prevent Hyperliquid API rate-limiting (HTTP 429).
+Shared candle cache to prevent venue API rate-limiting (HTTP 429).
 
 Candles don't change within their interval window, so we cache them
 with a TTL tied to the interval. E.g. 4h candles only need refresh
@@ -11,9 +11,9 @@ Thread-safe via a single asyncio.Lock per (coin, interval) key.
 import asyncio
 import logging
 import time
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Tuple
 
-from hyperliquid.info import Info
+from bridgeagent.venue.base import Venue
 
 logger = logging.getLogger(__name__)
 
@@ -28,21 +28,11 @@ _INTERVAL_TTL = {
     "1d": 3600,
 }
 
-_INTERVAL_MS = {
-    "1m": 60_000,
-    "5m": 300_000,
-    "15m": 900_000,
-    "30m": 1_800_000,
-    "1h": 3_600_000,
-    "4h": 14_400_000,
-    "1d": 86_400_000,
-}
-
 
 class CandleCache:
 
-    def __init__(self, info: Info):
-        self.info = info
+    def __init__(self, venue: Venue):
+        self.venue = venue
         self._cache: Dict[Tuple[str, str], Tuple[float, List[dict]]] = {}
         self._locks: Dict[Tuple[str, str], asyncio.Lock] = {}
 
@@ -74,12 +64,7 @@ class CandleCache:
                     return candles[-count:] if count else candles
 
             try:
-                end_ms = int(now * 1000)
-                interval_ms = _INTERVAL_MS.get(interval, 3_600_000)
-                start_ms = end_ms - (count * interval_ms)
-                candles = await asyncio.to_thread(
-                    self.info.candles_snapshot, coin, interval, start_ms, end_ms
-                )
+                candles = await self.venue.get_candles(coin, interval, count)
                 candles = candles or []
                 self._cache[key] = (now, candles)
                 return candles
