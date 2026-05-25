@@ -32,7 +32,7 @@ import logging
 import time
 from typing import Dict, Optional
 
-from hyperliquid.info import Info
+from bridgeagent.venue.base import Venue
 
 from bridgeagent import config
 from bridgeagent.core.liquidation_aggregator import CoinLiquidationStats

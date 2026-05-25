@@ -21,7 +21,7 @@ from typing import Optional, Dict, List, Tuple
 
 import numpy as np
 import pandas as pd
-from hyperliquid.info import Info
+from bridgeagent.venue.base import Venue
 
 from bridgeagent import config
 from bridgeagent.core.state import AgentState, Signal
@@ -37,8 +37,8 @@ PAIRS = [
 
 class PairsReversionStrategy(BaseStrategy):
 
-    def __init__(self, mainnet_info: Info, candle_cache=None):
-        self.info = mainnet_info
+    def __init__(self, venue: Venue, candle_cache=None):
+        self.venue = venue
         self.candle_cache = candle_cache
 
     @property
@@ -206,12 +206,7 @@ class PairsReversionStrategy(BaseStrategy):
             end_time = int(time.time() * 1000)
             interval_ms = 60 * 60 * 1000
             start_time = end_time - (config.PAIRS_CANDLE_COUNT * interval_ms)
-            candles = await asyncio.to_thread(
-                self.info.candles_snapshot,
-                coin,
-                config.PAIRS_CANDLE_INTERVAL,
-                start_time,
-                end_time,
+            candles = await self.venue.get_candles_window(coin, config.PAIRS_CANDLE_INTERVAL, start_time, end_time,
             )
             return candles or []
         except Exception as e:

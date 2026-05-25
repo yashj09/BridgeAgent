@@ -20,7 +20,7 @@ from typing import Optional, Dict
 
 import pandas as pd
 import ta
-from hyperliquid.info import Info
+from bridgeagent.venue.base import Venue
 
 from bridgeagent import config
 from bridgeagent.core.state import AgentState, Signal
@@ -31,8 +31,8 @@ logger = logging.getLogger(__name__)
 
 class FundingSniperStrategy(BaseStrategy):
 
-    def __init__(self, mainnet_info: Info, candle_cache=None):
-        self.info = mainnet_info
+    def __init__(self, venue: Venue, candle_cache=None):
+        self.venue = venue
         self.candle_cache = candle_cache
 
     @property
@@ -137,8 +137,7 @@ class FundingSniperStrategy(BaseStrategy):
             else:
                 end_time = int(time.time() * 1000)
                 start_time = end_time - (50 * 60 * 60 * 1000)
-                candles = await asyncio.to_thread(
-                    self.info.candles_snapshot, coin, "1h", start_time, end_time
+                candles = await self.venue.get_candles_window(coin, "1h", start_time, end_time
                 )
             if not candles or len(candles) < 21:
                 return True
@@ -161,8 +160,7 @@ class FundingSniperStrategy(BaseStrategy):
                 else:
                     end_time_4h = int(time.time() * 1000)
                     start_time_4h = end_time_4h - (50 * 4 * 60 * 60 * 1000)
-                    htf_candles = await asyncio.to_thread(
-                        self.info.candles_snapshot, coin, "4h", start_time_4h, end_time_4h
+                    htf_candles = await self.venue.get_candles_window(coin, "4h", start_time_4h, end_time_4h
                     )
                 if htf_candles and len(htf_candles) >= 21:
                     htf_closes = pd.Series([float(c["c"]) for c in htf_candles])

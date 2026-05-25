@@ -23,7 +23,7 @@ from typing import Optional, Dict, List
 
 import pandas as pd
 import ta
-from hyperliquid.info import Info
+from bridgeagent.venue.base import Venue
 
 from bridgeagent import config
 from bridgeagent.core.state import AgentState, Signal
@@ -34,8 +34,8 @@ logger = logging.getLogger(__name__)
 
 class MomentumStrategy(BaseStrategy):
 
-    def __init__(self, mainnet_info: Info, candle_cache=None):
-        self.info = mainnet_info
+    def __init__(self, venue: Venue, candle_cache=None):
+        self.venue = venue
         self.candle_cache = candle_cache
 
     @property
@@ -275,8 +275,7 @@ class MomentumStrategy(BaseStrategy):
             value = int(interval[:-1])
             mult = {"m": 60_000, "h": 3_600_000, "d": 86_400_000}.get(unit, 3_600_000)
             start_time = end_time - (count * value * mult)
-            candles = await asyncio.to_thread(
-                self.info.candles_snapshot, coin, interval, start_time, end_time
+            candles = await self.venue.get_candles_window(coin, interval, start_time, end_time
             )
             return candles or []
         except Exception as e:

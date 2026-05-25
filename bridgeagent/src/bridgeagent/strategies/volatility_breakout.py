@@ -22,7 +22,7 @@ from typing import Optional, Dict, List
 
 import pandas as pd
 import ta
-from hyperliquid.info import Info
+from bridgeagent.venue.base import Venue
 
 from bridgeagent import config
 from bridgeagent.core.state import AgentState, Signal
@@ -33,8 +33,8 @@ logger = logging.getLogger(__name__)
 
 class VolatilityBreakoutStrategy(BaseStrategy):
 
-    def __init__(self, mainnet_info: Info, candle_cache=None):
-        self.info = mainnet_info
+    def __init__(self, venue: Venue, candle_cache=None):
+        self.venue = venue
         self.candle_cache = candle_cache
 
     @property
@@ -206,12 +206,7 @@ class VolatilityBreakoutStrategy(BaseStrategy):
             now_ms = int(time.time() * 1000)
             interval_ms = 15 * 60 * 1000
             start_ms = now_ms - (config.BREAKOUT_LOOKBACK_CANDLES * interval_ms)
-            candles = await asyncio.to_thread(
-                self.info.candles_snapshot,
-                coin,
-                config.BREAKOUT_CANDLE_INTERVAL,
-                start_ms,
-                now_ms,
+            candles = await self.venue.get_candles_window(coin, config.BREAKOUT_CANDLE_INTERVAL, start_ms, now_ms,
             )
             return candles if candles else []
         except Exception as e:

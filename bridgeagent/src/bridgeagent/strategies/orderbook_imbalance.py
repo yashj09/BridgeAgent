@@ -110,7 +110,7 @@ class OrderbookImbalanceStrategy(BaseStrategy):
 
     async def _fetch_orderbook(self, coin: str) -> Optional[dict]:
         try:
-            book = await asyncio.to_thread(self.info.l2_snapshot, coin)
+            book = await self.venue.get_l2_book(coin)
             return book
         except Exception as e:
             logger.debug(f"Failed to fetch orderbook for {coin}: {e}")
