@@ -74,11 +74,14 @@ class BridgeAgentApp(App):
         self.state = AgentState()
         self.state.ai_enabled = config.AI_ENABLED_DEFAULT
 
+        # `self.client` is a HyperliquidVenue (via the core/client shim) that
+        # also satisfies the Venue protocol — strategies and core/ accept it
+        # directly as `venue: Venue`.
         self.client = HyperLiquidClient(testnet=True)
         self.risk = RiskManager(self.client, self.state)
 
-        self.candle_cache = CandleCache(self.client.info)
-        self.regime_detector = RegimeDetector(self.client.info, self.candle_cache)
+        self.candle_cache = CandleCache(self.client)
+        self.regime_detector = RegimeDetector(self.client, self.candle_cache)
 
         # HypeDexer client + aggregator power the Liquidation Cascade v2 strategy.
         # Initialized regardless of whether the strategy is active, so users can
@@ -87,12 +90,12 @@ class BridgeAgentApp(App):
         self.liq_aggregator = LiquidationAggregator(self.hypedexer)
 
         self.strategies = {
-            "trend_follower": TrendFollowerStrategy(self.client.info, self.candle_cache),
-            "momentum": MomentumStrategy(self.client.info, self.candle_cache),
-            "funding_carry": FundingSniperStrategy(self.client.info, self.candle_cache),
-            "volatility_breakout": VolatilityBreakoutStrategy(self.client.info, self.candle_cache),
-            "pairs_reversion": PairsReversionStrategy(self.client.info, self.candle_cache),
-            "liquidation_cascade_v2": LiquidationCascadeV2Strategy(self.client.info, self.candle_cache),
+            "trend_follower": TrendFollowerStrategy(self.client, self.candle_cache),
+            "momentum": MomentumStrategy(self.client, self.candle_cache),
+            "funding_carry": FundingSniperStrategy(self.client, self.candle_cache),
+            "volatility_breakout": VolatilityBreakoutStrategy(self.client, self.candle_cache),
+            "pairs_reversion": PairsReversionStrategy(self.client, self.candle_cache),
+            "liquidation_cascade_v2": LiquidationCascadeV2Strategy(self.client, self.candle_cache),
         }
         self.ai_wrapper: AIWrapper | None = None
         self._last_ai_error_logged: Optional[str] = None
