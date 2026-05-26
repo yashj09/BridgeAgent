@@ -77,6 +77,29 @@ BRIDGE_MAIN_ADDRESS = os.getenv("BRIDGE_MAIN_ADDRESS", "")
 # by app.py after the reconcile modal runs once.
 BRIDGE_RECONCILE_ON_BOOT = os.getenv("BRIDGE_RECONCILE_ON_BOOT", "") == "1"
 
+# ---------------------------------------------------------------------------
+# Mantle Sepolia anchor (chain 5003)
+# ---------------------------------------------------------------------------
+# We mirror every settled trade to the TradeJournal contract on Mantle and
+# mint an ERC-8004-style identity NFT for the agent. All four values must be
+# set for the on-chain mirror to engage; if any is missing, the runtime
+# logs a warning at startup and skips Mantle writes (trading still works).
+
+MANTLE_RPC_URL = os.getenv("MANTLE_RPC_URL", "https://rpc.sepolia.mantle.xyz")
+MANTLE_CHAIN_ID = int(os.getenv("MANTLE_CHAIN_ID", "5003"))
+MANTLE_PRIVATE_KEY = os.getenv("MANTLE_PRIVATE_KEY", "")
+MANTLE_IDENTITY_REGISTRY = os.getenv("MANTLE_IDENTITY_REGISTRY", "")
+MANTLE_TRADE_JOURNAL = os.getenv("MANTLE_TRADE_JOURNAL", "")
+
+# Set by the onboarding wizard after register_agent() succeeds. Empty string
+# means "no identity yet — register on next setup run".
+MANTLE_AGENT_ID = os.getenv("MANTLE_AGENT_ID", "")
+
+# Seconds between TradeJournal flushes. Per the plan: "Flush queue every 60s
+# with a single tx" — a single TradeRecorded event per settled trade, batched
+# only by being submitted in the same tx if multiple settle within the window.
+MANTLE_FLUSH_INTERVAL = int(os.getenv("MANTLE_FLUSH_INTERVAL", "60"))
+
 MONITORED_ASSETS = ["BTC", "ETH", "SOL", "DOGE", "XRP", "SUI", "AVAX", "LINK"]
 
 # Minimum signal score at which the AI wrapper bothers asking Claude for
