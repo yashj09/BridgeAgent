@@ -6,15 +6,21 @@ Handles:
   - Native HL trigger order placement (as backup TP/SL)
   - Daily loss limit tracking
   - Position size limits
+  - Mirroring settled trades to the on-chain Mantle TradeJournal (optional)
 """
 
 import logging
 import time
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, TYPE_CHECKING
 
 from bridgeagent import config
 from bridgeagent.core.state import AgentState, ActivePosition, Signal, TradeRecord
 from bridgeagent.core.client import HyperLiquidClient
+
+if TYPE_CHECKING:
+    # Type-only import to avoid pulling web3 at module load time when the
+    # Mantle mirror is disabled.
+    from bridgeagent.mantle import TradeJournalClient
 
 logger = logging.getLogger(__name__)
 
@@ -22,9 +28,15 @@ logger = logging.getLogger(__name__)
 class RiskManager:
     """Monitors open positions and enforces risk rules."""
 
-    def __init__(self, client: HyperLiquidClient, state: AgentState):
+    def __init__(
+        self,
+        client: HyperLiquidClient,
+        state: AgentState,
+        trade_journal: Optional["TradeJournalClient"] = None,
+    ):
         self.client = client
         self.state = state
+        self.trade_journal = trade_journal
 
     # ------------------------------------------------------------------
     # Position lifecycle
@@ -206,6 +218,12 @@ class RiskManager:
                 self.state.daily_pnl += pnl
                 if pos in self.state.positions:
                     self.state.positions.remove(pos)
+
+            # Mirror to on-chain TradeJournal (optional). enqueue() is cheap
+            # — just an in-memory append; the background flush worker submits
+            # the actual tx. Wrap in try/except so a Mantle wiring bug never
+            # disrupts trading, only the on-chain mirror is degraded.
+            self._enqueue_mantle_mirror(record)
 
             # Cancel leftover trigger orders (TP/SL) outside the lock — this
             # is a network call and can fail without affecting state.
@@ -485,3 +503,45 @@ class RiskManager:
             return (exit_price - pos.entry_price) * pos.size
         else:  # short
             return (pos.entry_price - exit_price) * pos.size
+
+    def _enqueue_mantle_mirror(self, record: TradeRecord) -> None:
+        """Append a settled trade to the Mantle TradeJournal queue.
+
+        The queue is flushed by a background worker every
+        config.MANTLE_FLUSH_INTERVAL seconds (see app.py). enqueue() is
+        synchronous and just appends to an in-memory list — safe to call
+        from the trade-close hot path.
+
+        Skipped silently if no journal is configured (i.e. MANTLE_* env
+        vars not set, or TradeJournalClient construction failed at startup).
+        """
+        if self.trade_journal is None:
+            return
+
+        try:
+            # Lazy import: avoid pulling web3 at module-load when the
+            # mirror is disabled.
+            from bridgeagent.mantle.trade_journal import SettledTrade
+
+            entry_notional = record.entry_price * record.size
+            pnl_pct = (record.pnl / entry_notional) if entry_notional else 0.0
+
+            trade = SettledTrade(
+                coin=record.coin,
+                entry_px=float(record.entry_price),
+                exit_px=float(record.exit_price),
+                size=float(record.size),
+                side=record.side,
+                opened_at=int(record.entry_time),
+                closed_at=int(record.exit_time),
+                pnl_pct=pnl_pct,
+            )
+            self.trade_journal.enqueue(trade)
+            logger.info(
+                "[MANTLE] queued %s %s for on-chain mirror (PnL: %+.4f%%)",
+                record.coin, record.side.upper(), pnl_pct * 100,
+            )
+        except Exception:
+            # Mantle mirror is best-effort. A failure here must not break
+            # the trade-close path that already updated local state.
+            logger.exception("[MANTLE] failed to queue trade for mirror")

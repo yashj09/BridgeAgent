@@ -78,7 +78,13 @@ class BridgeAgentApp(App):
         # also satisfies the Venue protocol — strategies and core/ accept it
         # directly as `venue: Venue`.
         self.client = HyperLiquidClient(testnet=True)
-        self.risk = RiskManager(self.client, self.state)
+
+        # Optional: on-chain mirror to Mantle Sepolia. Disabled if any of the
+        # MANTLE_* env vars are missing — the rest of the app runs unchanged.
+        self.mantle = self._init_mantle()
+        self.trade_journal = self._init_trade_journal()
+
+        self.risk = RiskManager(self.client, self.state, trade_journal=self.trade_journal)
 
         self.candle_cache = CandleCache(self.client)
         self.regime_detector = RegimeDetector(self.client, self.candle_cache)
@@ -118,6 +124,50 @@ class BridgeAgentApp(App):
             f"[INIT] Strategies: {', '.join(self.strategies.keys())}"
         )
         self.state.add_log(f"[INIT] Default strategy: {self.state.active_strategy}")
+        if self.trade_journal is not None:
+            self.state.add_log(
+                f"[INIT] Mantle on-chain mirror: ENABLED — agent #{config.MANTLE_AGENT_ID}, "
+                f"flushing every {config.MANTLE_FLUSH_INTERVAL}s"
+            )
+        else:
+            self.state.add_log(
+                "[INIT] Mantle on-chain mirror: disabled (set MANTLE_* env vars to enable)"
+            )
+
+    # ------------------------------------------------------------------
+    # Optional Mantle on-chain mirror setup
+    # ------------------------------------------------------------------
+
+    def _init_mantle(self):
+        """Try to construct a MantleClient. Returns None if any required
+        env var is missing or the RPC is unreachable. Trading still works
+        without it; only the on-chain TradeJournal mirror is skipped."""
+        try:
+            from bridgeagent.mantle import MantleClient
+            return MantleClient.from_config()
+        except Exception:
+            logger.exception("[MANTLE] failed to initialise client")
+            return None
+
+    def _init_trade_journal(self):
+        """Build a TradeJournalClient if both MantleClient and an agent_id
+        are configured. Returns None otherwise — risk manager treats that
+        as 'mirror disabled'."""
+        if self.mantle is None:
+            return None
+        if not config.MANTLE_AGENT_ID:
+            logger.warning(
+                "[MANTLE] mantle client is up but MANTLE_AGENT_ID is unset — "
+                "skipping TradeJournal mirror. Run the smoke test to register "
+                "an agent and capture its id."
+            )
+            return None
+        try:
+            from bridgeagent.mantle import TradeJournalClient
+            return TradeJournalClient(self.mantle, agent_id=int(config.MANTLE_AGENT_ID))
+        except Exception:
+            logger.exception("[MANTLE] failed to initialise TradeJournalClient")
+            return None
 
     # ------------------------------------------------------------------
     # Compose
@@ -151,6 +201,7 @@ class BridgeAgentApp(App):
         self.run_regime_detector()
         self.run_liquidation_poller()
         self.run_equity_tracker()
+        self.run_mantle_flush()
 
         # Periodic UI refresh
         self.set_interval(
@@ -1193,6 +1244,44 @@ class BridgeAgentApp(App):
                 logger.exception("Liquidation poller error")
 
             self._interruptible_sleep(config.HYPEDEXER_POLL_INTERVAL)
+
+    @work(exclusive=True, thread=True, group="mantle_flush")
+    def run_mantle_flush(self):
+        """Background worker that flushes the on-chain TradeJournal queue.
+
+        Every config.MANTLE_FLUSH_INTERVAL seconds, drains the TradeJournalClient
+        queue and submits a `record()` tx per pending trade. Each tx is mined
+        before the next is sent, so flushes are sequential — important because
+        all txs share the same signer nonce.
+
+        No-op if Mantle mirroring is disabled.
+        """
+        if self.trade_journal is None:
+            return
+
+        self.state.add_log(
+            f"[MANTLE] flush worker started (every {config.MANTLE_FLUSH_INTERVAL}s)"
+        )
+
+        while not self._shutting_down:
+            self._interruptible_sleep(config.MANTLE_FLUSH_INTERVAL)
+            if self._shutting_down:
+                break
+
+            pending = self.trade_journal.queue_size()
+            if pending == 0:
+                continue
+
+            try:
+                tx_hashes = self.trade_journal.flush()
+                if tx_hashes:
+                    self.state.add_log(
+                        f"[MANTLE] flushed {len(tx_hashes)} trade(s) on-chain "
+                        f"(latest: 0x{tx_hashes[-1][:8]}…)"
+                    )
+            except Exception as exc:
+                self.state.add_log(f"[MANTLE] flush error: {str(exc)[:120]}")
+                logger.exception("Mantle TradeJournal flush failed")
 
     def _flash_stop_loss(self):
         """Called from worker thread to flash the positions panel."""
