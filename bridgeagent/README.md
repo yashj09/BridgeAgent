@@ -1,34 +1,37 @@
-# BridgeAgent
+# bridgeagent (Python CLI)
 
-> Byreal-bootstrapped, Mantle-anchored agentic perps trading CLI.
+This directory contains the Python CLI / TUI for **BridgeAgent** — the autonomous perps trader that signs locally, runs deterministic risk checks, and mirrors every settled trade to Mantle Sepolia.
 
-**Status: WIP — fork in progress for the [Mantle Turing Test 2026 Hackathon](https://dorahacks.io/hackathon/mantleturingtesthackathon2026/detail).**
+For the full project overview, architecture diagram, deployed contract addresses, and demo, see the **[root README](../README.md)**.
 
-This project is a fork of [HyperAgent](https://github.com/yashj09/Hyperagent) (PyPI: `hyperliquidagent`), being ported to:
-
-1. Bootstrap its agent wallet through the **Byreal Perps CLI** (a Privy-bridged Hyperliquid frontend), satisfying the hackathon's *Agentic Wallets & Economy* track requirement.
-2. Anchor every settled trade and the agent's identity to **Mantle Sepolia** via:
-   - An **ERC-8004 IdentityRegistry** (agent identity NFT)
-   - A **TradeJournal** contract (append-only on-chain trade log)
-3. Run the existing HyperAgent multi-strategy engine + deterministic risk layer + Claude-explained trades — unchanged at runtime.
-
-Full architecture and build plan: see `../docs/hackathon.md` and the project plan file.
-
-## Submission tracks (DoraHacks)
-
-- **Agentic Wallets & Economy** (primary, sponsored by Byreal)
-- **AI Trading & Strategy** (secondary)
-
-## Repo layout (in progress)
+## What's in here
 
 ```
-bridgeagent/                    # Python CLI/TUI (this directory)
-contracts/                      # Foundry — IdentityRegistry + TradeJournal (D2–D4)
-web/                            # Next.js status page on Vercel (D11–D14)
+src/bridgeagent/
+  venue/          Venue protocol + venue implementation
+  mantle/         On-chain mirror: client, IdentityRegistry helper, TradeJournal helper
+  strategies/     7 quant strategies (trend, momentum, funding, vol, pairs, cascade, orderbook)
+  core/           Risk layer, regime detector, candle cache, agent state
+  tui/            Textual UI (dashboard, journal, analytics)
+  onboarding/     Setup wizard
+scripts/
+  mantle_smoke_test.py        register agent + sanity write
+  runtime_mirror_smoke.py     runtime → Mantle bridge test
 ```
 
-A polished README with setup instructions, architecture diagram, deployed contract addresses, and demo video lands in D17–D19. Until then, refer to the plan file.
+## Run it
+
+See **[`../docs/setup.md`](../docs/setup.md)** for the full local-run runbook (prereqs, env vars, funding, smoke tests, troubleshooting).
+
+Quick install:
+
+```bash
+python3 -m venv venv && source venv/bin/activate
+pip install -e .
+bridgeagent setup     # interactive wizard for agent key + Mantle config
+bridgeagent           # launch TUI
+```
 
 ## License
 
-MIT (inherited from HyperAgent).
+MIT.

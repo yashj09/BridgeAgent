@@ -1,6 +1,6 @@
 """TradeJournal helper — append-only on-chain log of settled trades.
 
-Settlement frequency in HyperAgent's loop is irregular (whenever a position
+Settlement frequency in BridgeAgent's loop is irregular (whenever a position
 closes). To keep gas spend bounded and avoid one-tx-per-trade overhead, we
 queue settled trades and flush them as separate `record()` txs at most once
 per `MANTLE_FLUSH_INTERVAL` seconds. Each `record()` is its own tx (the
