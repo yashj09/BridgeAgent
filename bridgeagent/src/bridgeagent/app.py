@@ -1,5 +1,5 @@
 """
-BridgeAgent — Autonomous Trading Terminal for Hyperliquid.
+BridgeAgent — Autonomous Trading Terminal for Bybit Perps.
 
 Main Textual application entry point. Composes the dashboard, strategy
 configuration, and trade journal screens inside a tabbed layout and runs
@@ -47,7 +47,7 @@ class BridgeAgentApp(App):
     """The main BridgeAgent TUI application."""
 
     TITLE = "BridgeAgent"
-    SUB_TITLE = "Autonomous Trading Terminal for Hyperliquid"
+    SUB_TITLE = "Autonomous Trading Terminal for Bybit Perps"
     CSS_PATH = "tui/styles.tcss"
 
     BINDINGS = [
@@ -74,7 +74,7 @@ class BridgeAgentApp(App):
         self.state = AgentState()
         self.state.ai_enabled = config.AI_ENABLED_DEFAULT
 
-        # `self.client` is a HyperliquidVenue (via the core/client shim) that
+        # `self.client` is a Bybit PerpsVenue (via the core/client shim) that
         # also satisfies the Venue protocol — strategies and core/ accept it
         # directly as `venue: Venue`.
         self.client = HyperLiquidClient(testnet=True)
@@ -1458,6 +1458,12 @@ def main() -> None:
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     )
+
+    # Quiet noisy third-party loggers that would otherwise print one INFO
+    # line per HTTP request above the TUI banner. Our own client wrappers
+    # log meaningful events at WARNING+ which still surface.
+    for noisy in ("httpx", "httpcore", "urllib3", "web3.providers.HTTPProvider"):
+        logging.getLogger(noisy).setLevel(logging.WARNING)
 
     # Subcommand dispatch (bare-bones — one subcommand, no argparse needed).
     if len(sys.argv) > 1 and sys.argv[1] == "setup":

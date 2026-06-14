@@ -133,9 +133,13 @@ class HypeDexerClient:
                     return None
 
                 if response.status_code == 401:
-                    logger.error(
-                        f"HypeDexer 401 unauthorized — check HYPEDEXER_API_KEY"
-                    )
+                    # Log once — every subsequent poll would otherwise re-emit
+                    # this and flood the screen until the user fixes the key.
+                    if not self.auth_failed:
+                        logger.warning(
+                            "HypeDexer 401 unauthorized — disabling further "
+                            "requests until HYPEDEXER_API_KEY is updated"
+                        )
                     self.auth_failed = True
                     return None
 
